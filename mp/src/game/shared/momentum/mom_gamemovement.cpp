@@ -1322,6 +1322,7 @@ void CMomentumGameMovement::CategorizePosition()
             if (!pm.m_pEnt || pm.plane.normal[2] < 0.7f)
             {
                 SetGroundEntity(nullptr);
+
                 // probably want to add a check for a +z velocity too!
                 if ((mv->m_vecVelocity.z > 0.0f) && (player->GetMoveType() != MOVETYPE_NOCLIP))
                 {
@@ -1614,6 +1615,15 @@ void CMomentumGameMovement::FullWalkMove()
         CategorizePosition();
 
         bool bInAirAfter = player->GetGroundEntity() == nullptr;
+
+        if (bInAirBefore && !bInAirAfter && m_pPlayer->m_bSurfing)
+        {
+            // Ramp->ground ramp leave
+            // engine->Con_NPrintf(4, "Grounded ramp Leave: %f", mv->m_vecVelocity.Length());
+            m_pPlayer->m_vecRampLeaveVel = mv->m_vecVelocity;
+
+            m_pPlayer->m_bSurfing = false;
+        }
 
         // Let player bhop after an edgebug
         trace_t &tr = m_pPlayer->GetLastCollisionTrace();
@@ -2071,8 +2081,7 @@ int CMomentumGameMovement::TryPlayerMove(Vector *pFirstDest, trace_t *pFirstTrac
         //  zero the plane counter.
         if (pm.fraction > 0.0f)
         {
-            if ((!bumpcount || player->GetGroundEntity() != nullptr || !sv_ramp_fix.GetBool()) && numbumps > 0 &&
-                pm.fraction == 1)
+            if ((!bumpcount || player->GetGroundEntity() != nullptr || !sv_ramp_fix.GetBool()) && numbumps > 0 && pm.fraction == 1.0f)
             {
                 // There's a precision issue with terrain tracing that can cause a swept box to successfully trace
                 // when the end position is stuck in the triangle.  Re-run the test with an uswept box to catch that
@@ -2123,6 +2132,15 @@ int CMomentumGameMovement::TryPlayerMove(Vector *pFirstDest, trace_t *pFirstTrac
         //  and can return.
         if (CloseEnough(pm.fraction, 1.0f, FLT_EPSILON))
         {
+            if (bumpcount == 0 && m_pPlayer->m_bSurfing)
+            {
+                // Airborne ramp leave
+                // engine->Con_NPrintf(3, "Airborne ramp Leave: %f", mv->m_vecVelocity.Length());
+                m_pPlayer->m_vecRampLeaveVel = mv->m_vecVelocity;
+
+                m_pPlayer->m_bSurfing = false;
+            }
+
             break; // moved the entire distance
         }
 
@@ -2182,8 +2200,19 @@ int CMomentumGameMovement::TryPlayerMove(Vector *pFirstDest, trace_t *pFirstTrac
             }
             else // either the player is surfing or slammed into a wall
             {
-                ClipVelocity(original_velocity, planes[0], new_velocity,
-                             1.0 + sv_bounce.GetFloat() * (1 - player->m_surfaceFriction));
+                const bool bSurfing = planes[0][2] > 0.0f;
+                if (bSurfing)
+                {
+                    if (!m_pPlayer->m_bSurfing)
+                    {
+                        // Ramp board
+                        //engine->Con_NPrintf(2, "Ramp board: %f", mv->m_vecVelocity.Length());
+                        m_pPlayer->m_vecRampBoardVel = mv->m_vecVelocity;
+                        m_pPlayer->m_bSurfing = true;
+                    }
+                }
+
+                ClipVelocity(original_velocity, planes[0], new_velocity, 1.0f + sv_bounce.GetFloat() * (1.0f - player->m_surfaceFriction));
             }
 
             VectorCopy(new_velocity, mv->m_vecVelocity);
@@ -2195,12 +2224,15 @@ int CMomentumGameMovement::TryPlayerMove(Vector *pFirstDest, trace_t *pFirstTrac
             {
                 ClipVelocity(original_velocity, planes[i], mv->m_vecVelocity, 1.0);
                 for (j = 0; j < numplanes; j++)
+                {
                     if (j != i)
                     {
                         // Are we now moving against this plane?
                         if (mv->m_vecVelocity.Dot(planes[j]) < 0)
                             break; // not ok
                     }
+                }
+
                 if (j == numplanes) // Didn't have to clip, so we're ok
                     break;
             }
@@ -2326,6 +2358,7 @@ void CMomentumGameMovement::SetGroundEntity(trace_t *pm)
 
     if (pm && pm->m_pEnt) // if (newGround)
         m_pPlayer->SetLastCollision(*pm);
+
 
 #ifdef GAME_DLL
     // Doing this after the BaseClass call in case OnLand wants to use the new ground stuffs

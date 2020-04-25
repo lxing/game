@@ -21,6 +21,7 @@
 #include "c_mom_replay_entity.h"
 
 #include "c_baseplayer.h"
+#include "mom_system_gamemode.h"
 #include "movevars_shared.h"
 #include "run/run_compare.h"
 
@@ -85,7 +86,8 @@ class CHudSpeedMeter : public CHudElement, public EditablePanel
     Color m_LastJumpVelColor;
 
     Label *m_pUnitsLabel, *m_pAbsSpeedoLabel, *m_pHorizSpeedoLabel, *m_pLastJumpVelLabel, 
-        *m_pStageEnterExitLabel, *m_pStageEnterExitComparisonLabel;
+        *m_pStageEnterExitLabel, *m_pStageEnterExitComparisonLabel, *m_pRampBoardVelLabel,
+        *m_pRampLeaveVelLabel;
 
     int m_defaultUnitsLabelHeight, m_defaultAbsSpeedoLabelHeight, m_defaultHorizSpeedoLabelHeight, 
         m_defaultLastJumpVelLabelHeight, m_defaultStageEnterExitLabelHeight;
@@ -138,6 +140,9 @@ CHudSpeedMeter::CHudSpeedMeter(const char *pElementName)
     m_pLastJumpVelLabel = new Label(this, "LastJumpVelLabel", "");
     m_pStageEnterExitLabel = new Label(this, "StageEnterExitLabel", "");
     m_pStageEnterExitComparisonLabel = new Label(this, "StageEnterExitComparisonLabel", "");
+
+    m_pRampBoardVelLabel = new Label(this, "RampBoardVelLabel", "");
+    m_pRampLeaveVelLabel = new Label(this, "RampLeaveVelLabel", "");
     
     LoadControlSettings("resource/ui/Speedometer.res");
 }
@@ -172,6 +177,9 @@ void CHudSpeedMeter::Reset()
     m_pStageEnterExitLabel->SetText("");
     m_pStageEnterExitComparisonLabel->SetText("");
     m_pLastJumpVelLabel->SetText("");
+
+    m_pRampLeaveVelLabel->SetText("");
+    m_pRampBoardVelLabel->SetText("");
 }
 
 void CHudSpeedMeter::FireGameEvent(IGameEvent *pEvent)
@@ -565,6 +573,13 @@ void CHudSpeedMeter::OnThink()
         {
             DeactivateLabel(m_pStageEnterExitLabel);
             DeactivateLabel(m_pStageEnterExitComparisonLabel);
+        }
+
+
+        if (g_pGameModeSystem->GameModeIs(GAMEMODE_SURF))
+        {
+            m_pRampBoardVelLabel->SetText(CConstructLocalizedString(L"Board: %s1", static_cast<int>(pPlayer->m_vecRampBoardVel->Length())));
+            m_pRampLeaveVelLabel->SetText(CConstructLocalizedString(L"Leave: %s1", static_cast<int>(pPlayer->m_vecRampLeaveVel->Length())));
         }
     }
 }
